@@ -11,7 +11,7 @@ from utils.captcha import solve_turnstile
 
 from . import config
 from .name_generator import NameGenerator, generate_birth_date
-from .img_generator import generate_image, generate_psu_email
+from .img_generator import generate_image, generate_personal_email
 
 # 配置日志
 logging.basicConfig(
@@ -265,7 +265,7 @@ class SheerIDVerifier:
             school = config.SCHOOLS[school_id]
 
             if not email:
-                email = generate_psu_email(first_name, last_name)
+                email = generate_personal_email(first_name, last_name)
             if not birth_date:
                 birth_date = generate_birth_date()
 

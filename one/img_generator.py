@@ -21,6 +21,23 @@ def generate_psu_email(first_name, last_name):
     return email
 
 
+def generate_personal_email(first_name, last_name):
+    """生成个人邮箱
+
+    SheerID 表单明确写着「Personal or school email is fine」。用 @psu.edu
+    编一个不存在的学号邮箱，等于主动送一个可被学校目录核对的反证；个人邮箱
+    无法被核对，且符合表单允许的范围。
+    """
+    domain = random.choice(["gmail.com", "outlook.com", "yahoo.com"])
+    style = random.choice([
+        f"{first_name.lower()}.{last_name.lower()}",
+        f"{first_name.lower()}{last_name.lower()}",
+    ])
+    if random.random() < 0.6:
+        style += str(random.randint(1, 999))
+    return f"{style}@{domain}"
+
+
 def generate_html(first_name, last_name, school_id='2565'):
     """
     生成 Penn State LionPATH HTML
