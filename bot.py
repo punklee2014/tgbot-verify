@@ -3,6 +3,7 @@ import logging
 from functools import partial
 
 from telegram.ext import Application, CommandHandler
+from telegram.request import HTTPXRequest
 
 from config import BOT_TOKEN
 from database_mysql import Database
@@ -20,6 +21,7 @@ from handlers.verify_commands import (
     verify2_command,
     verify3_command,
     verify4_command,
+    verify5_command,
     getV4Code_command,
 )
 from handlers.admin_commands import (
@@ -51,9 +53,25 @@ def main():
     db = Database()
 
     # 创建应用 - 启用并发处理
+    # 默认 read_timeout 只有 5s，网络抖动就会抛 TimedOut 并中断整个验证流程，
+    # 这里放宽到 60s（小机器 + 出图占 CPU 时尤其需要）
+    api_request = HTTPXRequest(
+        connect_timeout=20.0,
+        read_timeout=60.0,
+        write_timeout=30.0,
+        pool_timeout=30.0,
+    )
+    updates_request = HTTPXRequest(
+        connect_timeout=20.0,
+        read_timeout=60.0,
+        write_timeout=30.0,
+        pool_timeout=30.0,
+    )
     application = (
         Application.builder()
         .token(BOT_TOKEN)
+        .request(api_request)
+        .get_updates_request(updates_request)
         .concurrent_updates(True)  # 🔥 关键：启用并发处理多个命令
         .build()
     )
@@ -72,6 +90,7 @@ def main():
     application.add_handler(CommandHandler("verify2", partial(verify2_command, db=db)))
     application.add_handler(CommandHandler("verify3", partial(verify3_command, db=db)))
     application.add_handler(CommandHandler("verify4", partial(verify4_command, db=db)))
+    application.add_handler(CommandHandler("verify5", partial(verify5_command, db=db)))
     application.add_handler(CommandHandler("getV4Code", partial(getV4Code_command, db=db)))
 
     # 注册管理员命令
