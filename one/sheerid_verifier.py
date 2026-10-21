@@ -298,10 +298,13 @@ class SheerIDVerifier:
                 )
             v_country = (info.get("country") or "US").upper()
             v_locale = info.get("locale") or "en-US"
-            v_statuses = info.get("availableStatuses") or []
+            # 前端逻辑：只有 availableStatuses 含 GRADUATE 时才渲染学籍下拉，
+            # 否则 viewModel.statuses 固定为空数组。对齐真实 UI 行为。
+            v_statuses = []
             logger.info(
-                "验证对象: locale=%s country=%s statuses=%s attempts=%s",
-                v_locale, v_country, v_statuses, info.get("instantMatchAttempts"),
+                "验证对象: locale=%s country=%s availableStatuses=%s attempts=%s",
+                v_locale, v_country, info.get("availableStatuses"),
+                info.get("instantMatchAttempts"),
             )
 
             step2_body = {
