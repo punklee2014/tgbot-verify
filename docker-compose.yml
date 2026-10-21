@@ -11,11 +11,6 @@ services:
       - TZ=Asia/Shanghai
       - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
       - MYSQL_DATABASE=${MYSQL_DATABASE:-tgbot_verify}
-      - CAPTCHA_PROVIDER=${CAPTCHA_PROVIDER:-2captcha}
-      - CAPTCHA_API_KEY=${CAPTCHA_API_KEY:-}
-      - CAPTCHA_SITEKEY=${CAPTCHA_SITEKEY:-0x4AAAAAACaWNlR_tN9-HfHj}
-      - CAPTCHA_TIMEOUT=${CAPTCHA_TIMEOUT:-180}
-      - SHERID_PROXY=${SHERID_PROXY:-}
       - MYSQL_USER=${MYSQL_USER:-tgbot_user}
       - MYSQL_PASSWORD=${MYSQL_PASSWORD}
     volumes:
@@ -57,6 +52,7 @@ services:
       - CAPTCHA_API_KEY=${CAPTCHA_API_KEY:-}
       - CAPTCHA_SITEKEY=${CAPTCHA_SITEKEY:-0x4AAAAAACaWNlR_tN9-HfHj}
       - CAPTCHA_TIMEOUT=${CAPTCHA_TIMEOUT:-180}
+      - SHERID_PROXY=${SHERID_PROXY:-}
     volumes:
       - ./logs:/app/logs
     logging:
