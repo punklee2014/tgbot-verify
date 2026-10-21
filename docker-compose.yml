@@ -35,6 +35,7 @@ services:
   tgbot:
     build: .
     container_name: sheerid-tgbot
+    extra_hosts:/n      - "host.docker.internal:host-gateway"
     restart: unless-stopped
     depends_on:
       mysql:
