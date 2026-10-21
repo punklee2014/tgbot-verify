@@ -47,6 +47,7 @@ class SheerIDVerifier:
         """
         self.verification_id = verification_id
         self.program_id = program_id or PROGRAM_ID
+        logger.info("验证器: vid=%s programId=%s", self.verification_id, self.program_id)
         self.device_fingerprint = self._generate_device_fingerprint()
         self.http_client = httpx.Client(timeout=30.0)
 

@@ -33,6 +33,7 @@ class SheerIDVerifier:
         self.verification_id = verification_id
         # programId 优先用用户链接里的（永远最新），取不到才回落到 config
         self.program_id = program_id or config.PROGRAM_ID
+        logger.info("验证器: vid=%s programId=%s", self.verification_id, self.program_id)
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
         self.device_fingerprint = self._generate_device_fingerprint()
         self.http_client = httpx.Client(timeout=30.0)
