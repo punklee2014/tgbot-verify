@@ -290,11 +290,12 @@ class SheerIDVerifier:
                 "email": email,
                 "phoneNumber": "",
                 "birthDate": birth_date,
-                "countryChoice": {
-                    "value": v_country,
-                    "label": _COUNTRY_LABELS.get(v_country, v_country),
-                },
-                "localeChoice": {"value": v_locale, "label": ""},
+                # 服务端白名单：statuses/lastName/ipAddressExtended/birthDate/metadata/
+                # externalUserId/organization/country/phoneNumber/locale/firstName/email/
+                # captchaToken/ipAddress/email2/cvecNumber/deviceFingerprintHash
+                # 前端的 countryChoice / localeChoice 会被判 Unrecognized property
+                "country": v_country,
+                "locale": v_locale,
                 "organization": {
                     "id": int(school_id),
                     "idExtended": school["idExtended"],
