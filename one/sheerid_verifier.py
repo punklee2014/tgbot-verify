@@ -170,7 +170,8 @@ class SheerIDVerifier:
                 raise Exception(f"步骤 2 失败 (状态码 {step2_status}): {step2_data}")
             if step2_data.get("currentStep") == "error":
                 error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
-                raise Exception(f"步骤 2 错误: {error_msg}")
+                detail = step2_data.get("systemErrorMessage") or step2_data.get("errorDetailId") or ""
+                raise Exception(f"步骤 2 错误: {error_msg}" + (f"（{detail}）" if detail else ""))
 
             logger.info(f"✅ 步骤 2 完成: {step2_data.get('currentStep')}")
             current_step = step2_data.get("currentStep", current_step)
