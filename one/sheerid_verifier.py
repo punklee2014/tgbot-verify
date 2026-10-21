@@ -5,6 +5,7 @@ import logging
 import os
 import httpx
 from typing import Dict, Optional, Tuple
+from urllib.parse import urlparse, unquote
 
 from utils.captcha import solve_turnstile
 
@@ -28,6 +29,22 @@ _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
     "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
 )
+
+# 国家代码 -> 展示名（SheerID 前端 countryChoice.label 用，服务端只看 value）
+_COUNTRY_LABELS = {
+    "US": "United States",
+    "CN": "China",
+    "JP": "Japan",
+    "GB": "United Kingdom",
+    "CA": "Canada",
+    "AU": "Australia",
+    "DE": "Germany",
+    "FR": "France",
+    "TW": "Taiwan",
+    "HK": "Hong Kong",
+    "SG": "Singapore",
+    "KR": "South Korea",
+}
 
 
 class SheerIDVerifier:
@@ -120,6 +137,88 @@ class SheerIDVerifier:
             logger.error(f"SheerID 请求失败: {e}")
             raise
 
+    @staticmethod
+    def _playwright_proxy():
+        """把 socks5://user:pass@host:port 拆成 Playwright 的 proxy 配置"""
+        if not _SHERID_PROXY:
+            return None
+        u = urlparse(_SHERID_PROXY)
+        cfg = {"server": f"{u.scheme}://{u.hostname}:{u.port}"}
+        if u.username:
+            cfg["username"] = unquote(u.username)
+            cfg["password"] = unquote(u.password or "")
+        return cfg
+
+    def _submit_step2_in_browser(self, body: Dict) -> Tuple[Dict, int]:
+        """用真实 Chromium 打开验证页再提交
+
+        该 program 开了 ThreatMetrix(threatMetrixEnabled) 与 IPQS 设备指纹
+        (ipqsDeviceFingerprintEnabled)，服务端会核对本次验证是否伴随正常的
+        设备采集会话。纯 httpx 提交没有这些会话，会被 fraudRulesReject。
+        所以这里先用浏览器真实加载验证页触发采集，再在页面上下文里 fetch，
+        保证 cookie / Origin / 出口 IP / 设备会话全部一致。
+        """
+        from playwright.sync_api import sync_playwright
+
+        page_url = self._verify_page_url()
+        api_url = (
+            f"{config.SHEERID_BASE_URL}/rest/v2/verification/"
+            f"{self.verification_id}/step/collectStudentPersonalInfo"
+        )
+        js = """
+        async ({api, body}) => {
+            const r = await fetch(api, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                    'Accept': 'application/json, text/plain, */*'
+                },
+                credentials: 'include',
+                body: JSON.stringify(body)
+            });
+            let data;
+            try { data = await r.json(); } catch (e) { data = await r.text(); }
+            return { status: r.status, data: data };
+        }
+        """
+        with sync_playwright() as pw:
+            browser = pw.chromium.launch(
+                headless=True,
+                args=[
+                    "--no-sandbox",
+                    "--disable-dev-shm-usage",
+                    "--disable-gpu",
+                    "--disable-blink-features=AutomationControlled",
+                ],
+                proxy=self._playwright_proxy(),
+            )
+            try:
+                ctx = browser.new_context(
+                    user_agent=_BROWSER_UA,
+                    locale="en-US",
+                    viewport={"width": 1366, "height": 900},
+                    timezone_id="America/New_York",
+                )
+                ctx.add_init_script(
+                    "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
+                )
+                page = ctx.new_page()
+                page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
+                try:
+                    page.wait_for_load_state("networkidle", timeout=25000)
+                except Exception:
+                    pass
+                # 再给 ThreatMetrix / IPQS 的 beacon 一点时间上报
+                page.wait_for_timeout(6000)
+                logger.info("✅ 浏览器设备采集完成，页面内提交 step2")
+                res = page.evaluate(js, {"api": api_url, "body": body})
+                return res.get("data"), int(res.get("status") or 0)
+            finally:
+                try:
+                    browser.close()
+                except Exception:
+                    pass
+
     def _upload_to_s3(self, upload_url: str, img_data: bytes) -> bool:
         """上传 PNG 到 S3"""
         try:
@@ -173,22 +272,39 @@ class SheerIDVerifier:
 
             # 提交学生信息
             logger.info("步骤 2/4: 提交学生信息...")
+
+            # 先读一次验证对象，拿它创建时的 locale / country
+            # （前端 viewModel 的 countryChoice / localeChoice 就取这两个值）
+            info, _ = self._sheerid_request(
+                "GET",
+                f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}",
+            )
+            if not isinstance(info, dict):
+                info = {}
+            v_country = (info.get("country") or "US").upper()
+            v_locale = info.get("locale") or "en-US"
+
             step2_body = {
                 "firstName": first_name,
                 "lastName": last_name,
-                "birthDate": birth_date,
                 "email": email,
                 "phoneNumber": "",
+                "birthDate": birth_date,
+                "countryChoice": {
+                    "value": v_country,
+                    "label": _COUNTRY_LABELS.get(v_country, v_country),
+                },
+                "localeChoice": {"value": v_locale, "label": ""},
                 "organization": {
                     "id": int(school_id),
                     "idExtended": school["idExtended"],
                     "name": school["name"],
                 },
+                "statuses": [],
                 "deviceFingerprintHash": self.device_fingerprint,
-                "locale": "en-US",
                 "metadata": {
                     "marketConsentValue": False,
-                    "refererUrl": f"{config.SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}",
+                    "refererUrl": self._verify_page_url(),
                     "verificationId": self.verification_id,
                     "flags": '{"collect-info-step-email-first":"default","doc-upload-considerations":"default","doc-upload-may24":"default","doc-upload-redesign-use-legacy-message-keys":false,"docUpload-assertion-checklist":"default","font-size":"default","include-cvec-field-france-student":"not-labeled-optional"}',
                     "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
@@ -196,15 +312,10 @@ class SheerIDVerifier:
             }
 
             # SheerID 该步骤要求 Cloudflare Turnstile token，交给打码平台代解
-            step2_body["captchaToken"] = solve_turnstile(
-                f"{config.SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}"
-            )
+            step2_body["captchaToken"] = solve_turnstile(self._verify_page_url())
 
-            step2_data, step2_status = self._sheerid_request(
-                "POST",
-                f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}/step/collectStudentPersonalInfo",
-                step2_body,
-            )
+            # 关键：走真实 Chromium，让 ThreatMetrix / IPQS 拿到设备会话
+            step2_data, step2_status = self._submit_step2_in_browser(step2_body)
 
             if step2_status != 200:
                 raise Exception(f"步骤 2 失败 (状态码 {step2_status}): {step2_data}")
@@ -212,7 +323,7 @@ class SheerIDVerifier:
                 error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
                 detail = step2_data.get("systemErrorMessage") or step2_data.get("errorDetailId") or ""
                 if "fraudRulesReject" in (step2_data.get("errorIds") or []):
-                    detail = "被 SheerID 风控拦截：机房 IP 或设备指纹与创建验证时不一致"
+                    detail = "被 SheerID 风控拦截（IP 信誉 / 设备会话）"
                 raise Exception(f"步骤 2 错误: {error_msg}" + (f"（{detail}）" if detail else ""))
 
             logger.info(f"✅ 步骤 2 完成: {step2_data.get('currentStep')}")
