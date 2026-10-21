@@ -59,7 +59,7 @@ def generate_teacher_png(first_name: str, last_name: str) -> bytes:
     html = _render_template(first_name, last_name)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=True)
+        browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
         page = browser.new_page(viewport={"width": 1200, "height": 1000})
         page.set_content(html, wait_until="load")
         page.wait_for_timeout(500)  # 让样式稳定

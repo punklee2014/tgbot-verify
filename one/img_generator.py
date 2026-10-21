@@ -360,7 +360,7 @@ def generate_image(first_name, last_name, school_id='2565'):
 
         # 使用 Playwright 截图（替代 Selenium）
         with sync_playwright() as p:
-            browser = p.chromium.launch(headless=True)
+            browser = p.chromium.launch(headless=True, args=["--no-sandbox", "--disable-dev-shm-usage", "--disable-gpu"])
             page = browser.new_page(viewport={'width': 1200, 'height': 900})
             page.set_content(html_content, wait_until='load')
             page.wait_for_timeout(500)  # 等待样式加载
