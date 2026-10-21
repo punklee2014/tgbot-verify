@@ -203,7 +203,18 @@ class SheerIDVerifier:
                     "Object.defineProperty(navigator, 'webdriver', {get: () => undefined});"
                 )
                 page = ctx.new_page()
-                page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
+                last_err = None
+                for attempt in range(1, 4):
+                    try:
+                        page.goto(page_url, wait_until="domcontentloaded", timeout=90000)
+                        last_err = None
+                        break
+                    except Exception as e:
+                        last_err = e
+                        logger.warning("打开验证页失败（第 %s 次）: %s", attempt, e)
+                        page.wait_for_timeout(3000)
+                if last_err is not None:
+                    raise last_err
                 try:
                     page.wait_for_load_state("networkidle", timeout=25000)
                 except Exception:
@@ -273,16 +284,25 @@ class SheerIDVerifier:
             # 提交学生信息
             logger.info("步骤 2/4: 提交学生信息...")
 
-            # 先读一次验证对象，拿它创建时的 locale / country
-            # （前端 viewModel 的 countryChoice / localeChoice 就取这两个值）
+            # 先读一次验证对象，拿它创建时的 locale / country / 可选学籍状态
             info, _ = self._sheerid_request(
                 "GET",
                 f"{config.SHEERID_BASE_URL}/rest/v2/verification/{self.verification_id}",
             )
             if not isinstance(info, dict):
                 info = {}
+            if info.get("currentStep") == "error":
+                raise Exception(
+                    f"该验证链接已失效: {info.get('errorIds')} "
+                    f"({info.get('errorDetailId')})，请去 one.google.com/ai-student 重新生成"
+                )
             v_country = (info.get("country") or "US").upper()
             v_locale = info.get("locale") or "en-US"
+            v_statuses = info.get("availableStatuses") or []
+            logger.info(
+                "验证对象: locale=%s country=%s statuses=%s attempts=%s",
+                v_locale, v_country, v_statuses, info.get("instantMatchAttempts"),
+            )
 
             step2_body = {
                 "firstName": first_name,
@@ -301,7 +321,7 @@ class SheerIDVerifier:
                     "idExtended": school["idExtended"],
                     "name": school["name"],
                 },
-                "statuses": [],
+                "statuses": v_statuses,
                 "deviceFingerprintHash": self.device_fingerprint,
                 "metadata": {
                     "marketConsentValue": False,
