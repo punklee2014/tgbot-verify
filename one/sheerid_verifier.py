@@ -19,6 +19,12 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# 浏览器 UA：裸 python-httpx UA 会被风控直接标记
+_BROWSER_UA = (
+    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+    "(KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+)
+
 
 class SheerIDVerifier:
     """SheerID 学生身份验证器"""
@@ -61,6 +67,33 @@ class SheerIDVerifier:
         """
         match = re.search(r"/verify/([a-f0-9]{24})(?:[/?#]|$)", url, re.IGNORECASE)
         return match.group(1) if match else None
+
+    def _verify_page_url(self) -> str:
+        return f"{config.SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}"
+
+    def _warm_up_session(self) -> None:
+        """先访问验证页，拿到 JSESSIONID / sid-verificationId 等会话 cookie
+
+        SheerID 风控会检查提交请求是否来自同一会话。裸 httpx 直连
+        （无 cookie、无 Referer）会被直接判 fraudRulesReject。
+        """
+        try:
+            resp = self.http_client.get(
+                self._verify_page_url(),
+                headers={
+                    "User-Agent": _BROWSER_UA,
+                    "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+                    "Accept-Language": "en-US,en;q=0.9",
+                },
+                timeout=30.0,
+            )
+            logger.info(
+                "会话预热: HTTP %s, cookies=%s",
+                resp.status_code,
+                list(self.http_client.cookies.keys()),
+            )
+        except Exception as e:
+            logger.warning("会话预热失败（继续执行）: %s", e)
 
     def _sheerid_request(
         self, method: str, url: str, body: Optional[Dict] = None
@@ -106,6 +139,8 @@ class SheerIDVerifier:
         """执行验证流程"""
         try:
             current_step = "initial"
+            self._warm_up_session()
+
 
             if not first_name or not last_name:
                 name = NameGenerator.generate()
@@ -172,6 +207,8 @@ class SheerIDVerifier:
             if step2_data.get("currentStep") == "error":
                 error_msg = ", ".join(step2_data.get("errorIds", ["Unknown error"]))
                 detail = step2_data.get("systemErrorMessage") or step2_data.get("errorDetailId") or ""
+                if "fraudRulesReject" in (step2_data.get("errorIds") or []):
+                    detail = "被 SheerID 风控拦截：机房 IP 或设备指纹与创建验证时不一致"
                 raise Exception(f"步骤 2 错误: {error_msg}" + (f"（{detail}）" if detail else ""))
 
             logger.info(f"✅ 步骤 2 完成: {step2_data.get('currentStep')}")
