@@ -5,6 +5,8 @@ import logging
 import httpx
 from typing import Dict, Optional, Tuple
 
+from utils.captcha import solve_turnstile
+
 from . import config
 from .name_generator import NameGenerator, generate_birth_date
 from .img_generator import generate_images, generate_psu_email
@@ -187,6 +189,11 @@ class SheerIDVerifier:
                     "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",
                 },
             }
+
+            # SheerID 该步骤要求 Cloudflare Turnstile token，交给打码平台代解
+            step2_body["captchaToken"] = solve_turnstile(
+                f"{config.SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}"
+            )
 
             step2_data, step2_status = self._sheerid_request(
                 "POST",

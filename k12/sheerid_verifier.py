@@ -5,6 +5,8 @@ import logging
 import httpx
 from typing import Dict, Optional, Tuple
 
+from utils.captcha import solve_turnstile
+
 # 支持既作为包导入又直接脚本运行
 try:
     from . import config  # type: ignore
@@ -189,6 +191,11 @@ class SheerIDVerifier:
                     'submissionOptIn': 'By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount'
                 }
             }
+
+            # SheerID 该步骤要求 Cloudflare Turnstile token，交给打码平台代解
+            step2_body["captchaToken"] = solve_turnstile(
+                f"{SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}"
+            )
 
             step2_data, step2_status = self._sheerid_request(
                 'POST',

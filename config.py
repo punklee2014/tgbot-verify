@@ -19,5 +19,12 @@ CHECKIN_REWARD = 1  # 签到奖励积分
 INVITE_REWARD = 2  # 邀请奖励积分
 REGISTER_REWARD = 1  # 注册奖励积分
 
+# 人机验证（Cloudflare Turnstile）打码服务
+# SheerID 的 collect*PersonalInfo 步骤要求 captchaToken，机房 IP 无法自行通过
+CAPTCHA_PROVIDER = os.getenv("CAPTCHA_PROVIDER", "2captcha").strip().lower()
+CAPTCHA_API_KEY = os.getenv("CAPTCHA_API_KEY", "").strip()
+CAPTCHA_SITEKEY = os.getenv("CAPTCHA_SITEKEY", "0x4AAAAAACaWNlR_tN9-HfHj").strip()
+CAPTCHA_TIMEOUT = int(os.getenv("CAPTCHA_TIMEOUT", "180"))
+
 # 帮助链接
 HELP_NOTION_URL = "https://rhetorical-era-3f3.notion.site/dd78531dbac745af9bbac156b51da9cc"
