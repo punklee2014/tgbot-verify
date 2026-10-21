@@ -2,6 +2,7 @@
 import re
 import random
 import logging
+import os
 import httpx
 from typing import Dict, Optional, Tuple
 
@@ -33,6 +34,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+# SheerID 专用代理：机房 IP 会被 fraudRulesReject，配了就走代理
+_SHERID_PROXY = os.getenv("SHERID_PROXY") or None
+
 # 浏览器 UA：裸 python-httpx UA 会被风控直接标记
 _BROWSER_UA = (
     "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -55,7 +59,7 @@ class SheerIDVerifier:
         self.program_id = program_id or PROGRAM_ID
         logger.info("验证器: vid=%s programId=%s", self.verification_id, self.program_id)
         self.device_fingerprint = self._generate_device_fingerprint()
-        self.http_client = httpx.Client(timeout=30.0)
+        self.http_client = httpx.Client(timeout=30.0, proxy=_SHERID_PROXY)
 
     def __del__(self):
         """清理 HTTP 客户端"""
