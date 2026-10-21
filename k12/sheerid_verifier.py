@@ -35,14 +35,16 @@ logger = logging.getLogger(__name__)
 class SheerIDVerifier:
     """SheerID 教师身份验证器"""
 
-    def __init__(self, verification_id: str):
+    def __init__(self, verification_id: str, program_id: Optional[str] = None):
         """
         初始化验证器
 
         Args:
             verification_id: SheerID 验证 ID
+            program_id: 从用户链接解析出的 programId，为空则回落到 config
         """
         self.verification_id = verification_id
+        self.program_id = program_id or PROGRAM_ID
         self.device_fingerprint = self._generate_device_fingerprint()
         self.http_client = httpx.Client(timeout=30.0)
 
@@ -69,6 +71,16 @@ class SheerIDVerifier:
         if match:
             return match.group(1)
         return None
+
+    @staticmethod
+    def parse_program_id(url: str) -> Optional[str]:
+        """从验证链接中提取 programId（形如 /verify/<24位hex>/）
+
+        用户发来的链接本身就带当前有效的 programId，优先使用它，
+        避免 config.PROGRAM_ID 过期导致认证失败。
+        """
+        match = re.search(r'/verify/([a-f0-9]{24})(?:[/?#]|$)', url, re.IGNORECASE)
+        return match.group(1) if match else None
 
     def _sheerid_request(self, method: str, url: str,
                          body: Optional[Dict] = None) -> Tuple[Dict, int]:
@@ -172,7 +184,7 @@ class SheerIDVerifier:
                 'locale': 'en-US',
                 'metadata': {
                     'marketConsentValue': False,
-                    'refererUrl': f"{SHEERID_BASE_URL}/verify/{PROGRAM_ID}/?verificationId={self.verification_id}",
+                    'refererUrl': f"{SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}",
                     'verificationId': self.verification_id,
                     'submissionOptIn': 'By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount'
                 }

@@ -21,8 +21,10 @@ logger = logging.getLogger(__name__)
 class SheerIDVerifier:
     """SheerID 学生身份验证器"""
 
-    def __init__(self, verification_id: str):
+    def __init__(self, verification_id: str, program_id: Optional[str] = None):
         self.verification_id = verification_id
+        # programId 优先用用户链接里的（永远最新），取不到才回落到 config
+        self.program_id = program_id or config.PROGRAM_ID
         self.device_fingerprint = self._generate_device_fingerprint()
         self.http_client = httpx.Client(timeout=30.0)
 
@@ -46,6 +48,16 @@ class SheerIDVerifier:
         if match:
             return match.group(1)
         return None
+
+    @staticmethod
+    def parse_program_id(url: str) -> Optional[str]:
+        """从验证链接中提取 programId（形如 /verify/<24位hex>/）
+
+        用户发来的链接本身就带当前有效的 programId，优先使用它，
+        避免 config.PROGRAM_ID 过期导致认证失败。
+        """
+        match = re.search(r"/verify/([a-f0-9]{24})(?:[/?#]|$)", url, re.IGNORECASE)
+        return match.group(1) if match else None
 
     def _sheerid_request(
         self, method: str, url: str, body: Optional[Dict] = None
@@ -134,7 +146,7 @@ class SheerIDVerifier:
                 "locale": "en-US",
                 "metadata": {
                     "marketConsentValue": False,
-                    "refererUrl": f"{config.SHEERID_BASE_URL}/verify/{config.PROGRAM_ID}/?verificationId={self.verification_id}",
+                    "refererUrl": f"{config.SHEERID_BASE_URL}/verify/{self.program_id}/?verificationId={self.verification_id}",
                     "verificationId": self.verification_id,
                     "flags": '{"collect-info-step-email-first":"default","doc-upload-considerations":"default","doc-upload-may24":"default","doc-upload-redesign-use-legacy-message-keys":false,"docUpload-assertion-checklist":"default","font-size":"default","include-cvec-field-france-student":"not-labeled-optional"}',
                     "submissionOptIn": "By submitting the personal information above, I acknowledge that my personal information is being collected under the privacy policy of the business from which I am seeking a discount",

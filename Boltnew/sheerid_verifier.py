@@ -21,9 +21,16 @@ logger = logging.getLogger(__name__)
 class SheerIDVerifier:
     """SheerID 教师身份验证器"""
 
-    def __init__(self, install_page_url: str, verification_id: Optional[str] = None):
+    def __init__(
+        self,
+        install_page_url: str,
+        verification_id: Optional[str] = None,
+        program_id: Optional[str] = None,
+    ):
         self.install_page_url = self.normalize_url(install_page_url)
         self.verification_id = verification_id
+        # programId 优先用用户链接里的（永远最新），取不到才回落到 config
+        self.program_id = program_id or config.PROGRAM_ID
         self.external_user_id = self.parse_external_user_id(self.install_page_url)
         self.device_fingerprint = self._generate_device_fingerprint()
         self.http_client = httpx.Client(timeout=30.0)
@@ -50,6 +57,16 @@ class SheerIDVerifier:
         return None
 
     @staticmethod
+    def parse_program_id(url: str) -> Optional[str]:
+        """从验证链接中提取 programId（形如 /verify/<24位hex>/）
+
+        用户发来的链接本身就带当前有效的 programId，优先使用它，
+        避免 config.PROGRAM_ID 过期导致认证失败。
+        """
+        match = re.search(r"/verify/([a-f0-9]{24})(?:[/?#]|$)", url, re.IGNORECASE)
+        return match.group(1) if match else None
+
+    @staticmethod
     def parse_external_user_id(url: str) -> Optional[str]:
         match = re.search(r"externalUserId=([^&]+)", url, re.IGNORECASE)
         if match:
@@ -59,7 +76,7 @@ class SheerIDVerifier:
     def create_verification(self) -> str:
         """通过 installPageUrl 申请新的 verificationId"""
         body = {
-            "programId": config.PROGRAM_ID,
+            "programId": self.program_id,
             "installPageUrl": self.install_page_url,
         }
         data, status = self._sheerid_request(

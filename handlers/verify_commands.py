@@ -71,7 +71,9 @@ async def verify_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db:
     )
 
     try:
-        verifier = OneVerifier(verification_id)
+        verifier = OneVerifier(
+            verification_id, program_id=OneVerifier.parse_program_id(url)
+        )
         result = await asyncio.to_thread(verifier.verify)
 
         db.add_verification(
@@ -147,7 +149,9 @@ async def verify2_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     )
 
     try:
-        verifier = K12Verifier(verification_id)
+        verifier = K12Verifier(
+            verification_id, program_id=K12Verifier.parse_program_id(url)
+        )
         result = await asyncio.to_thread(verifier.verify)
 
         db.add_verification(
@@ -229,7 +233,9 @@ async def verify3_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
     try:
         async with semaphore:
-            verifier = SpotifyVerifier(verification_id)
+            verifier = SpotifyVerifier(
+                verification_id, program_id=SpotifyVerifier.parse_program_id(url)
+            )
             result = await asyncio.to_thread(verifier.verify)
 
         db.add_verification(
@@ -313,7 +319,11 @@ async def verify4_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
     try:
         async with semaphore:
             # 第1步：提交文档
-            verifier = BoltnewVerifier(url, verification_id=verification_id)
+            verifier = BoltnewVerifier(
+                url,
+                verification_id=verification_id,
+                program_id=BoltnewVerifier.parse_program_id(url),
+            )
             result = await asyncio.to_thread(verifier.verify)
 
         if not result.get("success"):
@@ -508,7 +518,9 @@ async def verify5_command(update: Update, context: ContextTypes.DEFAULT_TYPE, db
 
     try:
         async with semaphore:
-            verifier = YouTubeVerifier(verification_id)
+            verifier = YouTubeVerifier(
+                verification_id, program_id=YouTubeVerifier.parse_program_id(url)
+            )
             result = await asyncio.to_thread(verifier.verify)
 
         db.add_verification(
